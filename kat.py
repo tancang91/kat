@@ -2,24 +2,12 @@ import re
 import logging
 from pathlib import Path
 import argparse
-
 from typing import Union
+
+from .utils import Color
 
 PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
 THRESHOLD_FILE_SIZE_BYTES = 3 * (1024 ** 3)
-
-class Color:
-    @staticmethod
-    def green(s: str) -> str:
-        return "\x1b[0;32m" + s + "\x1b[0m"
-
-    @staticmethod
-    def red(s: str) -> str:
-        return "\x1b[0;31m" + s + "\x1b[0m"
-
-    @staticmethod
-    def yellow(s: str) -> str:
-        return "\x1b[0;33m" + s + "\x1b[0m"
 
 def extract_code(pattern, s: str) -> Union[None, str]:
     g = pattern.match(s)

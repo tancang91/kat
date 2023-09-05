@@ -20,7 +20,20 @@ class Encoder:
                , src: Union[str, PathLike]
                , dest: Union[str, PathLike]
                , format: VideoFormat):
-        cmd = ["cargo", "-cat"]
+
+        if format == VideoFormat.H265:
+            codec = "hevc_nvenc"
+        else:
+            codec = "h264_nvenc"
+
+        cmd = ["ffmpeg", "-hwaccel", "cuda", "-nostdin",
+               "-i", src,
+               "-c:v", codec,
+               "-b:v", "3M",
+               "-maxrate:v", "4M",
+               "-bufsize:v", "8M",
+               "-preset", "slow",
+               "-c:a", "copy", dest]
         await self.execute(cmd)
 
     async def encode_h265(self
@@ -30,8 +43,27 @@ class Encoder:
 
     async def execute(self, cmd: list):
         async def log_stderr():
-            async for line in reader:
-                self.logger.debug("%s: %s", cmd[0], line.decode().rstrip())
+            cnt = 10
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                chunk = chunk.decode()
+                while True:
+                    if len(chunk) > 0:
+                        if "\r" in chunk:
+                            (before, _, chunk) = chunk.partition("\r")
+                            msg = "{0}: {1}%\r".format(cmd[0], before.rstrip())
+                            cnt -= 1
+                            if cnt <= 0:
+                                self.logger.info(msg)
+                                cnt = 10
+                        else:
+                            (before, _, chunk) = chunk.partition("\n")
+                            msg = "{0}: {1}".format(cmd[0], before.rstrip())
+                            self.logger.debug(msg)
+                    else:
+                        break
 
         loop = asyncio.get_event_loop()
 

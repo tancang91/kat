@@ -18,10 +18,9 @@ def extract_code(pattern, s: str) -> Union[None, str]:
         return g.group(1)
     return None
 
-async def main():
+async def main(src, out):
     encoder = Encoder()
-    await encoder.encode_h265("", "")
-
+    await encoder.encode_h265(src, out)
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(asctime)s [%(levelname)7s]  %(message)s"
@@ -77,4 +76,5 @@ if __name__ == "__main__":
         else:
             logging.warning(">>> '[{1:<10}] {0}' not matched".format(str(path), Color.yellow("SKIPPING")))
 
+    # asyncio.run(main("", ""))
 

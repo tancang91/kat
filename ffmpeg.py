@@ -1,47 +1,52 @@
 from os import PathLike
 from enum import Enum
+import asyncio.subprocess as sp
+import asyncio
 
 from typing import Union
 
 import logging
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(format="%(asctime)s [%(levelname)7s]  %(message)s"
-                    , level=logging.DEBUG
-                    , datefmt="%Y-%m-%d %H:%M:%S")
-
-cmd = [
-    "ffmpeg",
-    "-h"
-]
 
 class VideoFormat(Enum):
     H264 = 1
     H265 = 2
 
-
 class Encoder:
     def __init__(self):
         self.logger = logging.getLogger("Encoder")
 
-    def encode(self
-               , src: Union[str, PathLike[str]]
-               , dest: Union[str, PathLike[str]]
+    async def encode(self
+               , src: Union[str, PathLike]
+               , dest: Union[str, PathLike]
                , format: VideoFormat):
-        pass
+        cmd = ["cargo", "-cat"]
+        await self.execute(cmd)
 
-    def encode_h265(self
-               , src: Union[str, PathLike[str]]
-               , dest: Union[str, PathLike[str]]):
-        self.encode(src, dest, VideoFormat.H265)
+    async def encode_h265(self
+               , src: Union[str, PathLike]
+               , dest: Union[str, PathLike]):
+        await self.encode(src, dest, VideoFormat.H265)
 
-'''
-import asyncio.subprocess
-import asyncio
-import subprocess
-import functools
+    async def execute(self, cmd: list):
+        async def log_stderr():
+            async for line in reader:
+                self.logger.debug("%s: %s", cmd[0], line.decode().rstrip())
 
-class MyProtocol(asyncio.subprocess.SubprocessStreamProtocol):
+        loop = asyncio.get_event_loop()
+
+        reader = asyncio.StreamReader(loop=loop)
+        transport, protocol = await loop.subprocess_exec(
+            lambda: FFmpegProtocol(reader, limit=2**16, loop=loop),
+            *cmd,
+            stdout=sp.PIPE, stderr=sp.PIPE,
+        )
+
+        proc = asyncio.subprocess.Process(transport, protocol, loop)
+        (_, _), _ = await asyncio.gather(proc.communicate(), log_stderr())
+
+
+class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):
     def __init__(self, reader, limit, loop):
         super().__init__(limit=limit, loop=loop)
         self._reader = reader
@@ -65,29 +70,4 @@ class MyProtocol(asyncio.subprocess.SubprocessStreamProtocol):
             else:
                 self._reader.feed_eof()
 
-async def main():
-
-    loop = asyncio.get_event_loop()
-
-    reader = asyncio.StreamReader(loop=loop)
-    protocol_factory = functools.partial(
-        MyProtocol, reader, limit=2**16, loop=loop
-    )
-
-    async def log_stderr():
-        async for line in reader:
-            logger.debug("%s: %s", cmd[0], line.decode().rstrip())
-
-    transport, protocol = await loop.subprocess_exec(
-        protocol_factory,
-        *cmd,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
-
-    proc = asyncio.subprocess.Process(transport, protocol, loop)
-    (out, err), _ = await asyncio.gather(proc.communicate(), log_stderr())
-
-
-asyncio.run(main())
-'''
 

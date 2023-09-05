@@ -1,3 +1,4 @@
+import asyncio
 import re
 import logging
 from pathlib import Path
@@ -5,15 +6,21 @@ import argparse
 from typing import Union
 
 from .utils import Color
+from .ffmpeg import Encoder
 
 PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
 THRESHOLD_FILE_SIZE_BYTES = 3 * (1024 ** 3)
+
 
 def extract_code(pattern, s: str) -> Union[None, str]:
     g = pattern.match(s)
     if g is not None:
         return g.group(1)
     return None
+
+async def main():
+    encoder = Encoder()
+    await encoder.encode_h265("", "")
 
 
 if __name__ == "__main__":
@@ -66,7 +73,8 @@ if __name__ == "__main__":
                 dirname.mkdir()
 
             path.rename(out)
-            logging.info(">>> '{0}' rename to {1}...{2}".format(str(path), out, Color.green("OK")))
+            logging.info(">>> '[{2:<10}] {0}' rename to {1}".format(str(path), out, Color.green("OK")))
         else:
-            logging.warning(">>> '{0}' not matched...{1}".format(str(path), Color.yellow("SKIPPING")))
+            logging.warning(">>> '[{1:<10}] {0}' not matched".format(str(path), Color.yellow("SKIPPING")))
+
 

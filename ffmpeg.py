@@ -1,10 +1,11 @@
-from os import PathLike
-from enum import Enum
 import asyncio.subprocess as sp
 import asyncio
+import json
+from os import PathLike
+from enum import Enum
+from dataclasses import dataclass
 
 from typing import Union
-
 import logging
 
 
@@ -12,7 +13,27 @@ class VideoFormat(Enum):
     H264 = 1
     H265 = 2
 
+
+@dataclass
+class MediaInfo:
+    path: str
+    format_name: str
+    size: int
+    bitrate: int
+    duration: int
+
+    def size_kb(self) -> float:
+        return round(self.size / 1024, 2)
+
+    def size_mb(self) -> float:
+        return round(self.size / (1024 ** 2), 2)
+
+    def size_gb(self) -> float:
+        return round(self.size / (1024 ** 3), 2)
+
+
 class Encoder:
+
     def __init__(self):
         self.logger = logging.getLogger("Encoder")
 
@@ -34,14 +55,33 @@ class Encoder:
                "-bufsize:v", "8M",
                "-preset", "slow",
                "-c:a", "copy", dest]
-        await self.execute(cmd)
+        await self.subprocess_exec(cmd)
 
     async def encode_h265(self
                , src: Union[str, PathLike]
                , dest: Union[str, PathLike]):
         await self.encode(src, dest, VideoFormat.H265)
 
-    async def execute(self, cmd: list):
+    async def get_media_info(self, media_path: Union[str, PathLike]):
+        cmd = ["ffprobe", "-v", "quiet",
+               "-print_format", "json",
+               "-show_format", media_path]
+
+        stdout, _, returncode = await self.subprocess_exec(cmd)
+
+        if returncode == 0:
+            json_str = json.loads(stdout.decode())
+            path = json_str["format"]["filename"]
+            duration = round(float(json_str["format"]["duration"]))
+            format_name = json_str["format"]["format_name"]
+            bitrate = int(json_str["format"]["bit_rate"])
+            size = int(json_str["format"]["size"])
+
+            return MediaInfo(path, format_name, size, bitrate, duration)
+
+        return None
+
+    async def subprocess_exec(self, cmd: list):
         async def log_stderr():
             cnt = 10
             while True:
@@ -75,7 +115,8 @@ class Encoder:
         )
 
         proc = asyncio.subprocess.Process(transport, protocol, loop)
-        (_, _), _ = await asyncio.gather(proc.communicate(), log_stderr())
+        (stdout, stder), _ = await asyncio.gather(proc.communicate(), log_stderr())
+        return (stdout, stder, proc.returncode)
 
 
 class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):
@@ -101,5 +142,4 @@ class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):
                 self._reader.set_exception(exc)
             else:
                 self._reader.feed_eof()
-
 

@@ -18,24 +18,15 @@ def extract_code(pattern, s: str) -> Union[None, str]:
         return g.group(1)
     return None
 
-async def main(src, out):
+async def encode_service(args):
+    input = args.input
+    out = args.out
     encoder = Encoder()
-    await encoder.encode_h265(src, out)
+    await encoder.encode_h265(input, out)
 
-if __name__ == "__main__":
-    logging.basicConfig(format="%(asctime)s [%(levelname)7s]  %(message)s"
-                        , level=logging.DEBUG
-                        , datefmt="%Y-%m-%d %H:%M:%S")
-
-    parser = argparse.ArgumentParser(description="Kat utilites")
-    parser.add_argument("path", type=str, help="Input Kat folder")
-    parser.add_argument("--target", type=str, required=True, help="Target folder")
-    parser.add_argument("--prefix", type=str, help="Prefix for file", default="")
-    parser.add_argument("--suffix", type=str, help="Suffix for file", default="")
-
-    args = parser.parse_args()
-    base_folder = args.path
-    target_folder = args.target
+def rename_service(args: argparse.Namespace):
+    base_folder = args.input
+    target_folder = args.out
     prefix = args.prefix
     suffix = args.suffix
 
@@ -48,8 +39,8 @@ if __name__ == "__main__":
     if not target_path.is_dir():
         raise OSError(f"ERROR: {target_folder} is not exist!")
 
-    logging.info(f"InputFolder: {base_path.absolute()}")
-    logging.info(f"OutFolder: {target_path.absolute()}")
+    logging.debug(f"InputFolder: {base_path.absolute()}")
+    logging.debug(f"OutFolder: {target_path.absolute()}")
 
     pattern = re.compile(PATTERN)
 
@@ -62,7 +53,6 @@ if __name__ == "__main__":
             continue
 
         code = extract_code(pattern, base_name)
-        full_name = f"{base_folder}/{path.name}"
 
         if code is not None:
             dirname = target_path / code
@@ -72,9 +62,50 @@ if __name__ == "__main__":
                 dirname.mkdir()
 
             path.rename(out)
-            logging.info(">>> '[{2:<10}] {0}' rename to {1}".format(str(path), out, Color.green("OK")))
+            logging.info(">>> [{2:<10}] '{0}' rename to {1}".format(str(path), out, Color.green("OK")))
         else:
             logging.warning(">>> '[{1:<10}] {0}' not matched".format(str(path), Color.yellow("SKIPPING")))
 
-    # asyncio.run(main("", ""))
+    logging.info("All done. Thanks for using my service")
+
+
+if __name__ == "__main__":
+    shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
+    shared_parser.add_argument("-i", "--input", required=True, type=str, help="Media path")
+    shared_parser.add_argument("-o", "--out", required=True, type=str, help="Path to write")
+    shared_parser.add_argument("-v", "--verbose", action="store_true", help="Path to write")
+
+    parser_2 = argparse.ArgumentParser()
+    command = parser_2.add_subparsers(help="command", dest="command")
+
+    encode_parser = command.add_parser("encode",
+                                          aliases=["en"],
+                                          parents=[shared_parser],
+                                          help="Encoding media service")
+
+    rename_parser = command.add_parser("rename",
+                                          aliases=["rn"],
+                                          parents=[shared_parser],
+                                          help="Rename media to standard KAT code")
+
+    rename_parser.add_argument("--prefix", type=str, help="Prefix for file", default="")
+    rename_parser.add_argument("--suffix", type=str, help="Suffix for file", default="")
+
+    args = parser_2.parse_args()
+    cmd = args.command
+    verbose = args.verbose
+
+    logging.basicConfig(format="%(asctime)s [%(levelname)7s]  %(message)s"
+                        , datefmt="%Y-%m-%d %H:%M:%S")
+
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        logging.getLogger().setLevel(logging.INFO)
+
+    if cmd in ("rename", "rn"):
+        rename_service(args)
+    elif cmd  in ("encode", "en"):
+        asyncio.run(encode_service(args))
+
 

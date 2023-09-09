@@ -50,9 +50,9 @@ class Encoder:
         cmd = ["ffmpeg", "-hwaccel", "cuda", "-nostdin",
                "-i", src,
                "-c:v", codec,
-               "-b:v", "3M",
-               "-maxrate:v", "4M",
-               "-bufsize:v", "8M",
+               "-b:v", "4M",
+               "-maxrate:v", "5M",
+               "-bufsize:v", "10M",
                "-preset", "slow",
                "-c:a", "copy", dest]
         await self.subprocess_exec(cmd)

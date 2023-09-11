@@ -1,9 +1,11 @@
 import asyncio.subprocess as sp
 import asyncio
 import json
+import os
 from os import PathLike
 from enum import Enum
 from dataclasses import dataclass
+from os.path import isfile
 
 from typing import Union
 import logging
@@ -22,6 +24,13 @@ class MediaInfo:
     bitrate: int
     duration: int
 
+    def __repr__(self) -> str:
+        return "MediaInfo:\n" + \
+                f">>> Path: {self.path}\n"  + \
+                f">>> Size: {self.size_gb()} gb - {self.size_mb()} mb\n"  + \
+                f">>> Bitrate: {self.bitrate // 1000} kb/s\n"  + \
+                f">>> Duration: {self.duration_str()}"
+
     def size_kb(self) -> float:
         return round(self.size / 1024, 2)
 
@@ -31,6 +40,12 @@ class MediaInfo:
     def size_gb(self) -> float:
         return round(self.size / (1024 ** 3), 2)
 
+    def duration_str(self) -> str:
+        hour = self.duration // 3600
+        min = (self.duration % 3600 ) // 60
+        sec = self.duration % 60
+
+        return f"{hour:02}:{min:02}:{sec:02}"
 
 class Encoder:
 
@@ -42,17 +57,33 @@ class Encoder:
                , dest: Union[str, PathLike]
                , format: VideoFormat):
 
+        if not os.path.isfile(src):
+            raise FileNotFoundError
+
+        if os.path.isfile(dest):
+            raise FileExistsError
+
         if format == VideoFormat.H265:
             codec = "hevc_nvenc"
         else:
             codec = "h264_nvenc"
 
-        cmd = ["ffmpeg", "-hwaccel", "cuda", "-nostdin",
+        media_info = await self.get_media_info(src)
+
+        if media_info is None:
+            raise OSError(f"ERROR: Cannot get media info of {media_info}")
+
+        self.logger.info(media_info)
+        self.logger.info(f"Converting to format {format}")
+
+        cmd = ["ffmpeg",
+               "-hwaccel", "cuda",
+               "-nostdin",
                "-i", src,
                "-c:v", codec,
-               "-b:v", "4M",
-               "-maxrate:v", "5M",
-               "-bufsize:v", "10M",
+               "-b:v", "3M",
+               "-maxrate:v", "4M",
+               "-bufsize:v", "8M",
                "-preset", "slow",
                "-c:a", "copy", dest]
         await self.subprocess_exec(cmd)

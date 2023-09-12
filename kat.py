@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 import argparse
 from typing import Union
+import sys
 
 from .utils import Color
 from .ffmpeg import Encoder
@@ -106,6 +107,9 @@ if __name__ == "__main__":
     if cmd in ("rename", "rn"):
         rename_service(args)
     elif cmd  in ("encode", "en"):
-        asyncio.run(encode_service(args))
-
+        try:
+            asyncio.run(encode_service(args))
+        except Exception as e:
+            print(e)
+            sys.exit(1)
 

@@ -5,10 +5,12 @@ import os
 from os import PathLike
 from enum import Enum
 from dataclasses import dataclass
-from os.path import isfile
 
 from typing import Union
 import logging
+import re
+
+from tqdm import tqdm
 
 
 class VideoFormat(Enum):
@@ -48,9 +50,17 @@ class MediaInfo:
         return f"{hour:02}:{min:02}:{sec:02}"
 
 class Encoder:
+    _PROGRESS_RX = re.compile(r"time=(\d{2}):(\d{2}):(\d{2})\.\d{2}")
+    _SPEED_RX = re.compile(r"speed='(.*)':")
 
     def __init__(self):
         self.logger = logging.getLogger("Encoder")
+        self.pbar = None
+        self.media_info = None
+
+    @staticmethod
+    def _seconds(hours, minutes, seconds):
+        return (int(hours) * 60 + int(minutes)) * 60 + int(seconds)
 
     async def encode(self
                , src: Union[str, PathLike]
@@ -58,22 +68,24 @@ class Encoder:
                , format: VideoFormat):
 
         if not os.path.isfile(src):
-            raise FileNotFoundError
+            raise FileNotFoundError(f"Input {src} not found!!")
 
         if os.path.isfile(dest):
-            raise FileExistsError
+            raise FileExistsError(f"Output {dest} already exist!!")
 
         if format == VideoFormat.H265:
             codec = "hevc_nvenc"
         else:
             codec = "h264_nvenc"
 
-        media_info = await self.get_media_info(src)
+        if self.media_info is None:
+            media_info = await self.get_media_info(src)
+            if media_info is None:
+                raise OSError(f"ERROR: Cannot get media info of {media_info}")
 
-        if media_info is None:
-            raise OSError(f"ERROR: Cannot get media info of {media_info}")
+            self.media_info = media_info
 
-        self.logger.info(media_info)
+        self.logger.info(self.media_info)
         self.logger.info(f"Converting to format {format}")
 
         cmd = ["ffmpeg",
@@ -86,6 +98,7 @@ class Encoder:
                "-bufsize:v", "8M",
                "-preset", "slow",
                "-c:a", "copy", dest]
+
         await self.subprocess_exec(cmd)
 
     async def encode_h265(self
@@ -114,9 +127,10 @@ class Encoder:
 
     async def subprocess_exec(self, cmd: list):
         async def log_stderr():
-            cnt = 10
+            duration = self.media_info.duration if self.media_info else 0
+
             while True:
-                chunk = await reader.read(4096)
+                chunk = await reader.read(1024)
                 if not chunk:
                     break
                 chunk = chunk.decode()
@@ -125,10 +139,7 @@ class Encoder:
                         if "\r" in chunk:
                             (before, _, chunk) = chunk.partition("\r")
                             msg = "{0}: {1}%\r".format(cmd[0], before.rstrip())
-                            cnt -= 1
-                            if cnt <= 0:
-                                self.logger.info(msg)
-                                cnt = 10
+                            self.progress(duration, before)
                         else:
                             (before, _, chunk) = chunk.partition("\n")
                             msg = "{0}: {1}".format(cmd[0], before.rstrip())
@@ -148,6 +159,22 @@ class Encoder:
         proc = asyncio.subprocess.Process(transport, protocol, loop)
         (stdout, stder), _ = await asyncio.gather(proc.communicate(), log_stderr())
         return (stdout, stder, proc.returncode)
+
+    def progress(self, total: int, line: str):
+        search = self._PROGRESS_RX.search(line)
+        if search is not None:
+            current = self._seconds(*search.groups())
+            unit = " secs"
+
+            if self.pbar is None:
+                self.pbar = tqdm(
+                    desc="Encoding videos",
+                    total=total,
+                    dynamic_ncols=True,
+                    unit=unit,
+                    ncols=0
+                )
+            self.pbar.update(current - self.pbar.n)
 
 
 class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):

@@ -147,6 +147,9 @@ class Encoder:
                     else:
                         break
 
+            if self.pbar:
+                self.pbar.update(duration - self.pbar.n)
+
         loop = asyncio.get_event_loop()
 
         reader = asyncio.StreamReader(loop=loop)
@@ -172,7 +175,8 @@ class Encoder:
                     total=total,
                     dynamic_ncols=True,
                     unit=unit,
-                    ncols=0
+                    ncols=0,
+                    colour="green",
                 )
             self.pbar.update(current - self.pbar.n)
 

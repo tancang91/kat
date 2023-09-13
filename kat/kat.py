@@ -20,10 +20,19 @@ def extract_code(pattern, s: str) -> Union[None, str]:
     return None
 
 async def encode_service(args):
-    input = args.input
-    out = args.out
+    src = args.input
+    dest = args.out
+    path = Path(dest)
+
+    if path.is_dir():
+        raise ValueError(f"ERROR: {path} is folder!!")
+    elif path.is_file():
+        yes = str(input(f"{path} alread exist. Would you like to overwrite it [y/N]: "))
+        if not yes.strip() in ("y", "Y"):
+            return
+
     encoder = Encoder()
-    await encoder.encode_h265(input, out)
+    await encoder.encode_h265(src, dest)
 
 def rename_service(args: argparse.Namespace):
     base_folder = args.input

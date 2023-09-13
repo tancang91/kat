@@ -115,11 +115,6 @@ class Encoder:
                "-c:a", "copy",
                dest]
 
-        cmd = ["ffmpeg",
-               "-nostdin",
-               "-i", src,
-               dest]
-
         await self.subprocess_exec(cmd)
 
     async def encode_h265(self

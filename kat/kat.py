@@ -62,7 +62,6 @@ async def encode_service(args):
     for (s, d) in pairs:
         if limit <= 0:
             break
-
         temp_proc_path = temp_dir_path / d.name
         if d.is_file():
             yes = str(input(f"{d} already exist!!\nWould you like to overwrite it [y/N]: "))
@@ -162,14 +161,28 @@ def main():
             exist_code = 0
         except KeyboardInterrupt:
             print("Received KeyboardInterrupt")
-            dest = Path(args.out)
-            if dest.is_file():
-                dest.unlink()
             exist_code = signal.SIGINT + 128
         except Exception as e:
             print(e)
             exist_code = 1
         finally:
+            print("Cleaning up...")
+            dest = Path(args.out)
+            temp_dir_path = None
+            if args.recursive and dest.is_dir():
+                temp_dir_path = dest / TMP_DIR_NAME
+            elif not args.recursive:
+                temp_dir_path = dest.parent / TMP_DIR_NAME
+
+            if temp_dir_path is not None and temp_dir_path.is_dir():
+                for f in temp_dir_path.glob("*.mp4"):
+                    logging.debug(f"Remove: {f}")
+                    f.unlink()
+
+                if not any(temp_dir_path.iterdir()):
+                    logging.debug(f"Remove temp folder: {temp_dir_path}")
+                    temp_dir_path.rmdir()
+
             logging.debug("Cleaning up....")
 
     return exist_code

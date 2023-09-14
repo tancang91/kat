@@ -5,6 +5,7 @@ from pathlib import Path
 import argparse
 from typing import Union
 import sys
+import signal
 
 from .utils import Color
 from .ffmpeg import Encoder
@@ -20,14 +21,13 @@ def extract_code(pattern, s: str) -> Union[None, str]:
     return None
 
 async def encode_service(args):
-    src = args.input
-    dest = args.out
-    path = Path(dest)
+    src = Path(args.input)
+    dest = Path(args.out)
 
-    if path.is_dir():
-        raise ValueError(f"ERROR: {path} is folder!!")
-    elif path.is_file():
-        yes = str(input(f"{path} alread exist. Would you like to overwrite it [y/N]: "))
+    if dest.is_dir():
+        raise ValueError(f"ERROR: {dest} is folder!!")
+    elif dest.is_file():
+        yes = str(input(f"{dest} already exist!!\nWould you like to overwrite it [y/N]: "))
         if not yes.strip() in ("y", "Y"):
             return
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
     shared_parser.add_argument("-i", "--input", required=True, type=str, help="Media path")
     shared_parser.add_argument("-o", "--out", required=True, type=str, help="Path to write")
-    shared_parser.add_argument("-v", "--verbose", action="store_true", help="Path to write")
+    shared_parser.add_argument("-v", "--verbose", action="store_true")
 
     parser_2 = argparse.ArgumentParser()
     command = parser_2.add_subparsers(help="command", dest="command")
@@ -118,6 +118,15 @@ if __name__ == "__main__":
     elif cmd  in ("encode", "en"):
         try:
             asyncio.run(encode_service(args))
+            sys.exit(0)
+        except KeyboardInterrupt:
+            print("Received KeyboardInterrupt")
+            logging.debug("Cleaning up....")
+
+            dest = Path(args.out)
+            if dest.is_file():
+                dest.unlink()
+            sys.exit(signal.SIGINT + 128)
         except Exception as e:
             print(e)
             sys.exit(1)

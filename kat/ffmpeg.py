@@ -51,17 +51,29 @@ class MediaInfo:
         return round(self.size / (1024 ** 3), 2)
 
     def duration_str(self) -> str:
-        hour = self.duration // 3600
-        min = (self.duration % 3600 ) // 60
-        sec = self.duration % 60
+        return "{0:02}:{1:02}:{2:02}".format(self.duration // 3600,
+                                            (self.duration % 3600 ) // 60,
+                                             self.duration % 60)
 
-        return "{0:02}:{1:02}:{2:02}".format(hour, min, sec)
+    @staticmethod
+    def from_ffmpeg_info(data: dict) -> Optional['MediaInfo']:
+        if isinstance(data, dict):
+            info = {
+                    "path": data["format"]["filename"],
+                    "duration": round(float(data["format"]["duration"])),
+                    "format_name" : data["format"]["format_name"],
+                    "bitrate" : int(data["format"]["bit_rate"]),
+                    "size" : int(data["format"]["size"]),
+            }
+            return MediaInfo(**info)
+        return None
 
     @property
     def name(self) -> str:
         if self._name is None:
             self._name = Path(self.path).name
         return self._name
+
 
 class Encoder:
     _PROGRESS_RX = re.compile(r"time=(\d{2}):(\d{2}):(\d{2})\.\d{2}")
@@ -73,19 +85,23 @@ class Encoder:
         self.pbar = None
         self.media_info = None
 
+
     @staticmethod
     def _seconds(hours, minutes, seconds):
         return (int(hours) * 60 + int(minutes)) * 60 + int(seconds)
+
 
     async def encode(self
                , src: Union[str, PathLike]
                , dest: Union[str, PathLike]
                , format: VideoFormat):
+        src = Path(src)
+        dest = Path(dest)
 
-        if not Path(src).is_file():
+        if not src.is_file():
             raise FileNotFoundError(f"ERROR: Source {src} not found!!")
 
-        if Path(dest).is_file():
+        if dest.is_file():
             Path(dest).unlink()
 
         if format == VideoFormat.H265:
@@ -106,16 +122,25 @@ class Encoder:
         cmd = ["ffmpeg",
                "-hwaccel", "cuda",
                "-nostdin",
-               "-i", src,
+               "-i", str(src),
                "-c:v", codec,
                "-b:v", "3M",
                "-maxrate:v", "4M",
                "-bufsize:v", "8M",
                "-preset", "slow",
                "-c:a", "copy",
-               dest]
+               str(dest)]
 
-        await self.subprocess_exec(cmd)
+        (_, stderr, returncode) = await self.subprocess_exec(cmd)
+
+        if returncode != 0:
+            self.logger.error(stderr.decode())
+            if dest.is_file():
+                dest.unlink()
+        else:
+            is_done = await self._valid_media(dest) and src.is_file()
+            if is_done:
+                src.unlink()
 
     async def encode_h265(self
                , src: Union[str, PathLike]
@@ -126,19 +151,11 @@ class Encoder:
         cmd = ["ffprobe", "-v", "quiet",
                "-print_format", "json",
                "-show_format", media_path]
-
         stdout, _, returncode = await self.subprocess_exec(cmd)
 
         if returncode == 0:
             json_str = json.loads(stdout.decode())
-            path = json_str["format"]["filename"]
-            duration = round(float(json_str["format"]["duration"]))
-            format_name = json_str["format"]["format_name"]
-            bitrate = int(json_str["format"]["bit_rate"])
-            size = int(json_str["format"]["size"])
-
-            return MediaInfo(path, format_name, size, bitrate, duration)
-
+            return MediaInfo.from_ffmpeg_info(json_str)
         return None
 
     async def subprocess_exec(self, cmd: list):
@@ -155,14 +172,13 @@ class Encoder:
                         if "\r" in chunk:
                             (before, _, chunk) = chunk.partition("\r")
                             msg = "{0}: {1}%\r".format(cmd[0], before.rstrip())
-                            self.progress(duration, before)
+                            self._progress(duration, before)
                         else:
                             (before, _, chunk) = chunk.partition("\n")
                             msg = "{0}: {1}".format(cmd[0], before.rstrip())
                             self.logger.debug(msg)
                     else:
                         break
-
             if self.pbar:
                 self.pbar.update(duration - self.pbar.n)
 
@@ -174,12 +190,11 @@ class Encoder:
             *cmd,
             stdout=sp.PIPE, stderr=sp.PIPE,
         )
-
         proc = asyncio.subprocess.Process(transport, protocol, loop)
         (stdout, stder), _ = await asyncio.gather(proc.communicate(), log_stderr())
         return (stdout, stder, proc.returncode)
 
-    def progress(self, total: int, line: str):
+    def _progress(self, total: int, line: str):
         progress_search = self._PROGRESS_RX.search(line)
         bitrate_search = self._BITRATE_RX.search(line)
         bitrate = bitrate_search[1] if bitrate_search is not None else -1
@@ -201,6 +216,11 @@ class Encoder:
                 )
             self.pbar.set_postfix_str(stats)
             self.pbar.update(current - self.pbar.n)
+
+    async def _valid_media(self, dest: Union[str, PathLike]) -> bool:
+        dest_media_info = await self.get_media_info(str(dest))
+        duration = self.media_info.duration if self.media_info else -1
+        return isinstance(dest_media_info, MediaInfo) and abs(dest_media_info.duration - duration) < 2
 
 
 class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):

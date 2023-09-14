@@ -131,6 +131,11 @@ class Encoder:
                "-c:a", "copy",
                str(dest)]
 
+        cmd = ["ffmpeg",
+               "-nostdin",
+               "-i", str(src),
+               str(dest)]
+
         (_, stderr, returncode) = await self.subprocess_exec(cmd)
 
         if returncode != 0:

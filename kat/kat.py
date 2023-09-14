@@ -6,12 +6,14 @@ import argparse
 from typing import Union
 import sys
 import signal
+from typing import Tuple, List
 
 from .utils import Color
 from .ffmpeg import Encoder
 
 PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
 THRESHOLD_FILE_SIZE_BYTES = 3 * (1024 ** 3)
+TMP_DIR_NAME = "_tmp"
 
 
 def extract_code(pattern, s: str) -> Union[None, str]:
@@ -23,16 +25,52 @@ def extract_code(pattern, s: str) -> Union[None, str]:
 async def encode_service(args):
     src = Path(args.input)
     dest = Path(args.out)
+    recursive = args.recursive
+    limit = args.max
 
-    if dest.is_dir():
-        raise ValueError(f"ERROR: {dest} is folder!!")
-    elif dest.is_file():
-        yes = str(input(f"{dest} already exist!!\nWould you like to overwrite it [y/N]: "))
-        if not yes.strip() in ("y", "Y"):
-            return
+    pairs: List[Tuple] = []
+
+    if not recursive:
+        if dest.is_dir():
+            raise ValueError(f"ERROR: Output {dest} folder not allowed in non-recursive mode!!")
+        pairs.append((src, dest))
+        temp_dir_path = dest.parent / TMP_DIR_NAME
+
+    else:
+        if not src.is_dir():
+            raise ValueError(f"ERROR: Input {src} must be folder in recursive mode!!")
+        elif not dest.is_dir():
+            raise ValueError(f"ERROR: Output {dest} must be folder in recursive mode!!")
+
+        logging.info(f"Start scanning...")
+        pat = re.compile(PATTERN)
+        for spath in src.glob("**/*.raw"):
+            code = extract_code(pat, spath.name)
+            if code is None:
+                continue
+
+            dest_path = dest / (code + ".mp4")
+            pairs.append((spath, dest_path))
+            logging.debug(f"Source: {spath}, Dest: {dest_path}")
+
+        temp_dir_path = dest / TMP_DIR_NAME
+
+    if not temp_dir_path.is_dir():
+        temp_dir_path.mkdir()
 
     encoder = Encoder()
-    await encoder.encode_h265(src, dest)
+    for (s, d) in pairs:
+        if limit <= 0:
+            break
+
+        temp_proc_path = temp_dir_path / d.name
+        if d.is_file():
+            yes = str(input(f"{d} already exist!!\nWould you like to overwrite it [y/N]: "))
+            if not yes.strip() in ("y", "Y"):
+                continue
+        await encoder.encode_h265(s, temp_proc_path)
+        temp_proc_path.rename(d)
+        limit -= 1
 
 def rename_service(args: argparse.Namespace):
     base_folder = args.input
@@ -79,7 +117,7 @@ def rename_service(args: argparse.Namespace):
     logging.info("All done. Thanks for using my service")
 
 
-if __name__ == "__main__":
+def main():
     shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
     shared_parser.add_argument("-i", "--input", required=True, type=str, help="Media path")
     shared_parser.add_argument("-o", "--out", required=True, type=str, help="Path to write")
@@ -92,12 +130,13 @@ if __name__ == "__main__":
                                           aliases=["en"],
                                           parents=[shared_parser],
                                           help="Encoding media service")
+    encode_parser.add_argument("-r", "--recursive", action="store_true", help="Recursive scan the input path")
+    encode_parser.add_argument("--max", type=int, help="Maximum number of encoding", default=4)
 
     rename_parser = command.add_parser("rename",
                                           aliases=["rn"],
                                           parents=[shared_parser],
                                           help="Rename media to standard KAT code")
-
     rename_parser.add_argument("--prefix", type=str, help="Prefix for file", default="")
     rename_parser.add_argument("--suffix", type=str, help="Suffix for file", default="")
 
@@ -113,21 +152,28 @@ if __name__ == "__main__":
     else:
         logging.getLogger().setLevel(logging.INFO)
 
+    exist_code = 0
     if cmd in ("rename", "rn"):
         rename_service(args)
-    elif cmd  in ("encode", "en"):
+
+    elif cmd in ("encode", "en"):
         try:
             asyncio.run(encode_service(args))
-            sys.exit(0)
+            exist_code = 0
         except KeyboardInterrupt:
             print("Received KeyboardInterrupt")
-            logging.debug("Cleaning up....")
-
             dest = Path(args.out)
             if dest.is_file():
                 dest.unlink()
-            sys.exit(signal.SIGINT + 128)
+            exist_code = signal.SIGINT + 128
         except Exception as e:
             print(e)
-            sys.exit(1)
+            exist_code = 1
+        finally:
+            logging.debug("Cleaning up....")
+
+    return exist_code
+
+if __name__ == "__main__":
+    sys.exit(main())
 

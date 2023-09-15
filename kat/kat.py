@@ -15,6 +15,10 @@ PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
 THRESHOLD_FILE_SIZE_BYTES = 3 * (1024 ** 3)
 TMP_DIR_NAME = "_tmp"
 
+KB_SIZE = 1024 ** 1
+MB_SIZE = 1024 ** 2
+GB_SIZE = 1024 ** 3
+
 
 def extract_code(pattern, s: str) -> Union[None, str]:
     g = pattern.match(s)
@@ -115,6 +119,46 @@ def rename_service(args: argparse.Namespace):
 
     logging.info("All done. Thanks for using my service")
 
+def mv_service(args: argparse.Namespace):
+    in_path = Path(args.input)
+    out_path = Path(args.out)
+
+    if not in_path.exists():
+        raise OSError(f"ERROR: {in_path} is not exist!")
+
+    if not out_path.is_dir():
+        raise ValueError(f"ERROR: Output {out_path} must be folder!!")
+
+    pairs: List[Tuple] = []
+    pat = re.compile(PATTERN)
+
+    if in_path.is_dir():
+        for path in in_path.glob("*.mp4"):
+            if path.stat().st_size < (100 * MB_SIZE):
+                logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(path), Color.yellow("SKIPPING")))
+                continue
+
+            if (code := extract_code(pat, path.name)) is not None:
+                dest_media_path = out_path / code / (code + ".mp4")
+                pairs.append((path, dest_media_path))
+    elif in_path.is_file() and in_path.suffix == ".mp4":
+        if in_path.stat().st_size < (100 * MB_SIZE):
+            logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(in_path), Color.yellow("SKIPPING")))
+        elif (code := extract_code(pat, in_path.name)) is not None:
+            dest_media_path = out_path / code / (code + ".mp4")
+            pairs.append((in_path, dest_media_path))
+    else:
+        return
+
+    for (s, d) in pairs:
+        if d.is_file():
+            logging.info("[{1:<10}] {0} already exist".format(str(d), Color.yellow("SKIPPING")))
+        else:
+            if not d.parent.is_dir():
+                d.parent.mkdir()
+            s.rename(d)
+            logging.info("[{1:<10}] Move to {0}".format(str(d), Color.green("OK")))
+
 
 def main():
     shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
@@ -139,6 +183,11 @@ def main():
     rename_parser.add_argument("--prefix", type=str, help="Prefix for file", default="")
     rename_parser.add_argument("--suffix", type=str, help="Suffix for file", default="")
 
+    mv_parser = command.add_parser("move",
+                                  aliases=["mv"],
+                                  parents=[shared_parser],
+                                  help="Move to media folder")
+
     args = parser_2.parse_args()
     cmd = args.command
     verbose = args.verbose
@@ -154,6 +203,9 @@ def main():
     exist_code = 0
     if cmd in ("rename", "rn"):
         rename_service(args)
+
+    elif cmd in ("move", "mv"):
+        mv_service(args)
 
     elif cmd in ("encode", "en"):
         try:

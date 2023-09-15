@@ -109,12 +109,11 @@ class Encoder:
         else:
             codec = "h264_nvenc"
 
-        if self.media_info is None:
-            media_info = await self.get_media_info(src)
-            if media_info is None:
-                raise OSError(f"ERROR: Cannot get media info of {media_info}")
+        media_info = await self.get_media_info(src)
+        if media_info is None:
+            raise OSError(f"ERROR: Cannot get media info of {media_info}")
 
-            self.media_info = media_info
+        self.media_info = media_info
 
         self.logger.debug(f"Converting to format {format}")
         print(self.media_info)
@@ -181,6 +180,7 @@ class Encoder:
                         break
             if self.pbar:
                 self.pbar.update(duration - self.pbar.n)
+            self.pbar = None
 
         loop = asyncio.get_event_loop()
 

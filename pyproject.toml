@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kat"
+version = "0.0.1"
+dependencies = [
+    "tqdm",
+]
+
+[project.scripts]
+kat = "kat:main"

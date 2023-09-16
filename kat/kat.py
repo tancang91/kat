@@ -1,32 +1,25 @@
-import asyncio
 import re
 import logging
-from pathlib import Path
-import argparse
 from typing import Union
-import sys
-import signal
 from typing import Tuple, List
+from argparse import Namespace
+from pathlib import Path
 
 from .utils import Color
 from .ffmpeg import Encoder
 
-PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
+CODE_PATTERN = r"(?:|.*\W+)([A-Z]+-[0-9]+)\W*"
 THRESHOLD_FILE_SIZE_BYTES = 3 * (1024 ** 3)
+MB_SIZE = 1024 ** 2
 TMP_DIR_NAME = "_tmp"
 
-KB_SIZE = 1024 ** 1
-MB_SIZE = 1024 ** 2
-GB_SIZE = 1024 ** 3
-
-
-def extract_code(pattern, s: str) -> Union[None, str]:
+def _extract_code(pattern, s: str) -> Union[None, str]:
     g = pattern.match(s)
     if g is not None:
         return g.group(1)
     return None
 
-async def encode_service(args):
+async def encode_service(args: Namespace):
     src = Path(args.input)
     dest = Path(args.out)
     recursive = args.recursive
@@ -47,9 +40,9 @@ async def encode_service(args):
             raise ValueError(f"ERROR: Output {dest} must be folder in recursive mode!!")
 
         logging.info(f"Start scanning...")
-        pat = re.compile(PATTERN)
+        pat = re.compile(CODE_PATTERN)
         for spath in src.glob("**/*.raw"):
-            code = extract_code(pat, spath.name)
+            code = _extract_code(pat, spath.name)
             if code is None:
                 continue
 
@@ -75,7 +68,7 @@ async def encode_service(args):
         temp_proc_path.rename(d)
         limit -= 1
 
-def rename_service(args: argparse.Namespace):
+def rename_service(args: Namespace):
     base_folder = args.input
     target_folder = args.out
     prefix = args.prefix
@@ -93,7 +86,7 @@ def rename_service(args: argparse.Namespace):
     logging.debug(f"InputFolder: {base_path.absolute()}")
     logging.debug(f"OutFolder: {target_path.absolute()}")
 
-    pattern = re.compile(PATTERN)
+    pattern = re.compile(CODE_PATTERN)
 
     for path in base_path.glob("**/*.mp4"):
         base_name = path.name
@@ -103,7 +96,7 @@ def rename_service(args: argparse.Namespace):
             logging.warning(">>> {0} size less than threshold...{1}".format(str(path) ,Color.yellow("SKIPPING")))
             continue
 
-        code = extract_code(pattern, base_name)
+        code = _extract_code(pattern, base_name)
 
         if code is not None:
             dirname = target_path / code
@@ -119,7 +112,7 @@ def rename_service(args: argparse.Namespace):
 
     logging.info("All done. Thanks for using my service")
 
-def mv_service(args: argparse.Namespace):
+def mv_service(args: Namespace):
     in_path = Path(args.input)
     out_path = Path(args.out)
 
@@ -130,7 +123,7 @@ def mv_service(args: argparse.Namespace):
         raise ValueError(f"ERROR: Output {out_path} must be folder!!")
 
     pairs: List[Tuple] = []
-    pat = re.compile(PATTERN)
+    pat = re.compile(CODE_PATTERN)
 
     if in_path.is_dir():
         for path in in_path.glob("*.mp4"):
@@ -138,13 +131,13 @@ def mv_service(args: argparse.Namespace):
                 logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(path), Color.yellow("SKIPPING")))
                 continue
 
-            if (code := extract_code(pat, path.name)) is not None:
+            if (code := _extract_code(pat, path.name)) is not None:
                 dest_media_path = out_path / code / (code + ".mp4")
                 pairs.append((path, dest_media_path))
     elif in_path.is_file() and in_path.suffix == ".mp4":
         if in_path.stat().st_size < (100 * MB_SIZE):
             logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(in_path), Color.yellow("SKIPPING")))
-        elif (code := extract_code(pat, in_path.name)) is not None:
+        elif (code := _extract_code(pat, in_path.name)) is not None:
             dest_media_path = out_path / code / (code + ".mp4")
             pairs.append((in_path, dest_media_path))
     else:
@@ -158,87 +151,4 @@ def mv_service(args: argparse.Namespace):
                 d.parent.mkdir()
             s.rename(d)
             logging.info("[{1:<10}] Move to {0}".format(str(d), Color.green("OK")))
-
-
-def main():
-    shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
-    shared_parser.add_argument("-i", "--input", required=True, type=str, help="Media path")
-    shared_parser.add_argument("-o", "--out", required=True, type=str, help="Path to write")
-    shared_parser.add_argument("-v", "--verbose", action="store_true")
-
-    parser_2 = argparse.ArgumentParser()
-    command = parser_2.add_subparsers(help="command", dest="command")
-
-    encode_parser = command.add_parser("encode",
-                                          aliases=["en"],
-                                          parents=[shared_parser],
-                                          help="Encoding media service")
-    encode_parser.add_argument("-r", "--recursive", action="store_true", help="Recursive scan the input path")
-    encode_parser.add_argument("--max", type=int, help="Maximum number of encoding", default=4)
-
-    rename_parser = command.add_parser("rename",
-                                          aliases=["rn"],
-                                          parents=[shared_parser],
-                                          help="Rename media to standard KAT code")
-    rename_parser.add_argument("--prefix", type=str, help="Prefix for file", default="")
-    rename_parser.add_argument("--suffix", type=str, help="Suffix for file", default="")
-
-    mv_parser = command.add_parser("move",
-                                  aliases=["mv"],
-                                  parents=[shared_parser],
-                                  help="Move to media folder")
-
-    args = parser_2.parse_args()
-    cmd = args.command
-    verbose = args.verbose
-
-    logging.basicConfig(format="%(asctime)s [%(levelname)7s]  %(message)s"
-                        , datefmt="%Y-%m-%d %H:%M:%S")
-
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    else:
-        logging.getLogger().setLevel(logging.INFO)
-
-    exist_code = 0
-    if cmd in ("rename", "rn"):
-        rename_service(args)
-
-    elif cmd in ("move", "mv"):
-        mv_service(args)
-
-    elif cmd in ("encode", "en"):
-        try:
-            asyncio.run(encode_service(args))
-            exist_code = 0
-        except KeyboardInterrupt:
-            print("Received KeyboardInterrupt")
-            exist_code = signal.SIGINT + 128
-        except Exception as e:
-            print(e)
-            exist_code = 1
-        finally:
-            print("Cleaning up...")
-            dest = Path(args.out)
-            temp_dir_path = None
-            if args.recursive and dest.is_dir():
-                temp_dir_path = dest / TMP_DIR_NAME
-            elif not args.recursive:
-                temp_dir_path = dest.parent / TMP_DIR_NAME
-
-            if temp_dir_path is not None and temp_dir_path.is_dir():
-                for f in temp_dir_path.glob("*.mp4"):
-                    logging.debug(f"Remove: {f}")
-                    f.unlink()
-
-                if not any(temp_dir_path.iterdir()):
-                    logging.debug(f"Remove temp folder: {temp_dir_path}")
-                    temp_dir_path.rmdir()
-
-            logging.debug("Cleaning up....")
-
-    return exist_code
-
-if __name__ == "__main__":
-    sys.exit(main())
 

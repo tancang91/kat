@@ -212,7 +212,7 @@ class Encoder:
                     dynamic_ncols=True,
                     unit=unit,
                     ncols=0,
-                    colour="green",
+                    colour="#00FF00",
                 )
             self.pbar.set_postfix_str(stats)
             self.pbar.update(current - self.pbar.n)

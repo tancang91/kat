@@ -13,10 +13,19 @@ from .kat import (
 
 
 def _parse_option() -> 'argparse.Namespace':
-    shared_parser = argparse.ArgumentParser(prog="kat", description="Kat utilites", add_help=False)
-    shared_parser.add_argument("-i", "--input", required=True, type=str, help="Media path")
-    shared_parser.add_argument("-o", "--out", required=True, type=str, help="Path to write")
-    shared_parser.add_argument("-v", "--verbose", action="store_true")
+    shared_parser = argparse.ArgumentParser(prog="kat"
+                                            , description="Kat utilites"
+                                            , add_help=False)
+    shared_parser.add_argument("-i", "--input"
+                               , required=True
+                               , type=str
+                               , help="Media path")
+    shared_parser.add_argument("-o", "--out"
+                               , required=True
+                               , type=str
+                               , help="Path to write")
+    shared_parser.add_argument("-v", "--verbose"
+                               , action="store_true")
 
     parser_2 = argparse.ArgumentParser()
     command = parser_2.add_subparsers(help="command", dest="command")
@@ -25,8 +34,13 @@ def _parse_option() -> 'argparse.Namespace':
                                           aliases=["en"],
                                           parents=[shared_parser],
                                           help="Encoding media service")
-    encode_parser.add_argument("-r", "--recursive", action="store_true", help="Recursive scan the input path")
-    encode_parser.add_argument("--max", type=int, help="Maximum number of encoding", default=4)
+    encode_parser.add_argument("-r", "--recursive"
+                               , action="store_true"
+                               , help="Recursive scan the input path")
+    encode_parser.add_argument("--max"
+                               , type=int
+                               , default=4
+                               , help="Maximum number of encoding")
 
     rename_parser = command.add_parser("rename",
                                           aliases=["rn"],

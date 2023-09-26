@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Union
 import logging
 import re
-from tqdm import tqdm
+from tqdm import tqdm as td
 
 
 class VideoFormat(Enum):
@@ -204,9 +204,11 @@ class Encoder:
             stats = "{0} kb/s".format(bitrate)
 
             if self.pbar is None:
-                desc = "Encoding " + (self.media_info.name if self.media_info and self.media_info.name else "N/A")
+                desc = "Encoding " + (self.media_info.name
+                                        if self.media_info and self.media_info.name
+                                        else "N/A")
                 unit = " secs"
-                self.pbar = tqdm(
+                self.pbar = td(
                     desc=desc,
                     total=total,
                     dynamic_ncols=True,
@@ -220,7 +222,8 @@ class Encoder:
     async def _valid_media(self, dest: Union[str, PathLike]) -> bool:
         dest_media_info = await self.get_media_info(str(dest))
         duration = self.media_info.duration if self.media_info else -1
-        return isinstance(dest_media_info, MediaInfo) and abs(dest_media_info.duration - duration) < 2
+        return isinstance(dest_media_info, MediaInfo) \
+                and abs(dest_media_info.duration - duration) < 2
 
 
 class FFmpegProtocol(asyncio.subprocess.SubprocessStreamProtocol):

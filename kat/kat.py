@@ -29,7 +29,7 @@ async def encode_service(args: Namespace):
 
     if not recursive:
         if dest.is_dir():
-            raise ValueError(f"ERROR: Output {dest} folder not allowed in non-recursive mode!!")
+            raise ValueError(f"Output {dest} folder not allowed in non-recursive mode")
         pairs.append((src, dest))
         temp_dir_path = dest.parent / TMP_DIR_NAME
 
@@ -39,7 +39,7 @@ async def encode_service(args: Namespace):
         elif not dest.is_dir():
             raise ValueError(f"ERROR: Output {dest} must be folder in recursive mode!!")
 
-        logging.info(f"Start scanning...")
+        logging.info("Start scanning...")
         pat = re.compile(CODE_PATTERN)
         for spath in src.glob("**/*.raw"):
             code = _extract_code(pat, spath.name)
@@ -61,8 +61,8 @@ async def encode_service(args: Namespace):
             break
         temp_proc_path = temp_dir_path / d.name
         if d.is_file():
-            yes = str(input(f"{d} already exist!!\nWould you like to overwrite it [y/N]: "))
-            if not yes.strip() in ("y", "Y"):
+            yes = str(input(f"{d} already exist!\nWould you like to overwrite [y/N]: "))
+            if yes.strip() not in ("y", "Y"):
                 continue
         await encoder.encode_h265(s, temp_proc_path)
         temp_proc_path.rename(d)
@@ -93,7 +93,9 @@ def rename_service(args: Namespace):
         ext = path.suffix
 
         if path.lstat().st_size < THRESHOLD_FILE_SIZE_BYTES:
-            logging.warning(">>> {0} size less than threshold...{1}".format(str(path) ,Color.yellow("SKIPPING")))
+            logging.warning(">>> {0} size less than threshold...{1}" \
+                                .format(str(path) ,Color.yellow("SKIPPING"))
+                        )
             continue
 
         code = _extract_code(pattern, base_name)
@@ -106,9 +108,13 @@ def rename_service(args: Namespace):
                 dirname.mkdir()
 
             path.rename(out)
-            logging.info(">>> [{2:<10}] '{0}' rename to {1}".format(str(path), out, Color.green("OK")))
+            logging.info(">>> [{2:<10}] '{0}' rename to {1}" \
+                            .format(str(path), out, Color.green("OK"))
+                    )
         else:
-            logging.warning(">>> '[{1:<10}] {0}' not matched".format(str(path), Color.yellow("SKIPPING")))
+            logging.warning(">>> '[{1:<10}] {0}' not matched" \
+                                .format(str(path), Color.yellow("SKIPPING"))
+                        )
 
     logging.info("All done. Thanks for using my service")
 
@@ -128,7 +134,9 @@ def mv_service(args: Namespace):
     if in_path.is_dir():
         for path in in_path.glob("*.mp4"):
             if path.stat().st_size < (100 * MB_SIZE):
-                logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(path), Color.yellow("SKIPPING")))
+                logging.warning("[{1:<10}] {0} size too small (less than 100mb)" \
+                                    .format(str(path), Color.yellow("SKIPPING"))
+                            )
                 continue
 
             if (code := _extract_code(pat, path.name)) is not None:
@@ -136,7 +144,9 @@ def mv_service(args: Namespace):
                 pairs.append((path, dest_media_path))
     elif in_path.is_file() and in_path.suffix == ".mp4":
         if in_path.stat().st_size < (100 * MB_SIZE):
-            logging.warning("[{1:<10}] {0} size too small (less than 100mb)".format(str(in_path), Color.yellow("SKIPPING")))
+            logging.warning("[{1:<10}] {0} size too small (less than 100mb)" \
+                                .format(str(in_path), Color.yellow("SKIPPING"))
+                        )
         elif (code := _extract_code(pat, in_path.name)) is not None:
             dest_media_path = out_path / code / (code + ".mp4")
             pairs.append((in_path, dest_media_path))
@@ -145,7 +155,9 @@ def mv_service(args: Namespace):
 
     for (s, d) in pairs:
         if d.is_file():
-            logging.info("[{1:<10}] {0} already exist".format(str(d), Color.yellow("SKIPPING")))
+            logging.info("[{1:<10}] {0} already exist" \
+                            .format(str(d), Color.yellow("SKIPPING"))
+                    )
         else:
             if not d.parent.is_dir():
                 d.parent.mkdir()

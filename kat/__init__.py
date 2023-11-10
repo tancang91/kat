@@ -41,6 +41,7 @@ def _parse_option() -> 'argparse.Namespace':
                                , type=int
                                , default=4
                                , help="Maximum number of encoding")
+    encode_parser.add_argument("--suffix", type=str, help="Suffix for file", default=".mp4")
 
     rename_parser = command.add_parser("rename",
                                           aliases=["rn"],

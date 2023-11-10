@@ -22,8 +22,10 @@ def _extract_code(pattern, s: str) -> Union[None, str]:
 async def encode_service(args: Namespace):
     src = Path(args.input)
     dest = Path(args.out)
+
     recursive = args.recursive
     limit = args.max
+    suffix = args.suffix
 
     pairs: List[Tuple] = []
 
@@ -41,7 +43,7 @@ async def encode_service(args: Namespace):
 
         logging.info("Start scanning...")
         pat = re.compile(CODE_PATTERN)
-        for spath in src.glob("**/*.raw"):
+        for spath in src.glob("**/*" + suffix):
             code = _extract_code(pat, spath.name)
             if code is None:
                 continue
